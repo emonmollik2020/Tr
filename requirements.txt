@@ -1,1 +1,5 @@
-
+ccxt
+pandas
+ta
+flask
+gunicorn
