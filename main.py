@@ -91,7 +91,7 @@ app = Flask(__name__)
 
 
 # =====================================================================
-# SECTION 3: ১৭টি শক্তিশালী ক্যান্ডেলস্টিক প্যাটার্ন ডিটেক্টর
+# SECTION 3: ক্যান্ডেলস্টিক প্যাটার্ন ডিটেক্টর
 # =====================================================================
 def get_advanced_pats(df):
     p = []
@@ -139,11 +139,11 @@ def bot_engine():
     in_pos, entry_p, peak_p = False, 0.0, 0.0
     
     last_trade_time = 0         
-    COOLDOWN_SECONDS = 900      # ট্রেন্ড ক্লোজ হওয়ার পর ১৫ মিনিট (৯০০ সেকেন্ড) বিরতি
+    COOLDOWN_SECONDS = 900      # ট্রেন্ড ক্লোজ হওয়ার পর ১৫ মিনিট বিরতি
 
     while True:
         try:
-            # ১৫ মিনিটের ক্যান্ডেলস্টিক ডাটা সংগ্রহ (৪০০টি ক্যান্ডেল, যা থেকে ১ ঘণ্টার চার্ট তৈরি হবে)
+            # ১৫ মিনিটের ক্যান্ডেলস্টিক ডাটা সংগ্রহ
             bars15 = exchange.fetch_ohlcv(SYMBOL, '15m', limit=400)
             df15 = pd.DataFrame(bars15, columns=['t', 'o', 'h', 'l', 'c', 'v'])
             
@@ -151,8 +151,8 @@ def bot_engine():
             df15['dt'] = pd.to_datetime(df15['t'], unit='ms')
             df15.set_index('dt', inplace=True)
             
-            # ১৫-মিনিটের ডাটা জোড়া দিয়ে মেমোরিতে ১-ঘণ্টার (1H) চার্ট তৈরি করা (সম্পূর্ণ নো-ল্যাগ)
-            df1h = df15.resample('1H').agg({
+            # ১৫-মিনিটের ডাটা জোড়া দিয়ে মেমোরিতে ১-ঘণ্টার চার্ট তৈরি করা (পান্ডাস ২.২+ সামঞ্জস্যপূর্ণ ছোট হাতের '1h')
+            df1h = df15.resample('1h').agg({
                 't': 'first',
                 'o': 'first',
                 'h': 'max',
@@ -198,18 +198,15 @@ def bot_engine():
             # ১. ক্রয়ের লজিক (BUY Condition - সুইং ট্রেডিং উপযোগী)
             bull_signal = any(pt['t'] == 'bull' for pt in pats15) or any(pt['t'] == 'bull' for pt in pats1h)
             
-            # শর্ত: ১ ঘণ্টা চার্ট ইএমএ ২০০ এর উপরে (ম্যাক্রো আপট্রেন্ড), ১৫ মিনিটে ইএমএ ২০ ও ৫০ এর উপরে, RSI ৪০-৬৫ এর মধ্যে, MACD বুলিশ, প্যাটার্ন ও কুলডাউন সম্পন্ন
             macro_bullish = p > e200
             ema_alignment = p > e20 and p > e50
             can_buy = (macro_bullish and ema_alignment and (40 < r15 < 65) and (mv > ms) and bull_signal and cooldown_over)
 
             # ২. বিক্রয়ের লজিক (SELL / Trend Reversal Exit)
-            # শর্ত: ১৫-মিনিটে মূল্য ইএমএ ৫০ এর নিচে নামলে (ট্রেন্ড শেষ) অথবা RSI অতিরিক্ত ওভারবট (>৭৮) হলে প্রফিট বুক
             smart_sell = p < e50 or r15 > 78
 
             if in_pos:
                 # ক. নো-লস সুরক্ষাকবচ (Breakeven Protection)
-                # ট্রেন্ড ট্রেডিংয়ে মূল্য যখনই এন্ট্রি থেকে ১.২% ওপরে যাবে, স্টপ লস এন্ট্রিতে আসবে (ঝুঁকিমুক্ত ট্রেড)
                 breakeven_trigger = entry_p * 1.012
                 if p >= breakeven_trigger and cur["sl_level"] < entry_p:
                     cur.update({"sl_level": round(entry_p, 2)})
@@ -255,7 +252,7 @@ def bot_engine():
                         "tp_level": round(p * (1 + DEF_TP), 2),
                         "last_action": "BUY"
                     })
-                    cur["history"].insert(0, {"t": datetime.now().strftime("%H:%M"), "a": "BUY", "p": round(p, 2), "r": "---"})
+                    cur["history"].insert(0, {"t": datetime.now().strftime("%H:%M"), "a": "BUY", "p": round(p, 2), "r": "---" })
                     cur["log"].insert(0, {"t": datetime.now().strftime("%H:%M"), "m": f"🟢 BUY @ ${p:.2f} (Trend Confirmed)"})
             
             # ড্যাশবোর্ডের জন্য স্টেট আপডেট
@@ -298,7 +295,6 @@ def bot_engine():
         except Exception as e:
             print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Bot Engine Warning: {e}")
             
-        # সুইং ট্রেডিংয়ের জন্য ১০ সেকেন্ড লোড অত্যন্ত নিরাপদ ও লাইটওয়েট
         time.sleep(10)
 
 
@@ -322,7 +318,7 @@ def index():
 
 
 # =====================================================================
-# SECTION 6: ড্যাশবোর্ড UI টেমপ্লেট (১৫মিনিট ও ১ঘণ্টা উপযোগী)
+# SECTION 6: ড্যাশবোর্ড UI টেমপ্লেট (HTML, CSS ও JS স্ক্রিপ্ট)
 # =====================================================================
 UI = """
 <!DOCTYPE html>
@@ -408,7 +404,7 @@ UI = """
         <div id="pats1h" class="mt-3 flex flex-wrap gap-1"></div>
     </div>
 
-    <!-- চার্ট উইজেট (TradingView চার্টটিকে ১৫-মিনিটে আপডেট করা হয়েছে) -->
+    <!-- চার্ট উইজেট -->
     <div class="card overflow-hidden h-60 mb-4 border border-slate-100 shadow-inner">
         <iframe src="https://s.tradingview.com/widgetembed/?symbol=BITGET%3ASOLUSDT&interval=15&theme=light" width="100%" height="100%" frameborder="0"></iframe>
     </div>
@@ -530,7 +526,7 @@ UI = """
             }
         } catch (e) {}
     }
-    // সুইং ট্রেডিংয়ের জন্য ৫ সেকেন্ড পর পর ড্যাশবোর্ড আপডেট হওয়াই যথেষ্ট
+    // ড্যাশবোর্ড ৫ সেকেন্ড পর পর ডাটা লোড করবে
     setInterval(update, 5000); 
     update();
 </script>
